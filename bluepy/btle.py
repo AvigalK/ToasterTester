@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 from __future__ import print_function
 
 """Bluetooth Low Energy Python interface"""
@@ -283,7 +282,7 @@ class BluepyHelper:
             self._stderr = open(os.devnull, "w")
             args=[helperExe]
             if iface is not None: args.append(str(iface))
-            self._helper = subprocess.Popen(args,
+            self._helper = subprocess.Popen(['sudo'] +args,
                                             stdin=subprocess.PIPE,
                                             stdout=subprocess.PIPE,
                                             stderr=self._stderr,
@@ -402,7 +401,7 @@ class BluepyHelper:
 
 
 class Peripheral(BluepyHelper):
-    def __init__(self, deviceAddr=None, addrType=ADDR_TYPE_PUBLIC, iface=None,sec = "low", timeout=None):
+    def __init__(self, deviceAddr=None, addrType=ADDR_TYPE_PUBLIC, iface=None,sec = "medium", timeout=None):
         BluepyHelper.__init__(self)
         self._serviceMap = None # Indexed by UUID
         (self.deviceAddr, self.addrType, self.iface) = (None, None, None)

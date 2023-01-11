@@ -1,160 +1,138 @@
-import matplotlib.pyplot as plt
 import csv
-import sys
-import warnings
+import numpy as np
+import matplotlib.pyplot as plt
+from datetime import datetime
+import test_parameters
 
-if not sys.warnoptions:
-    warnings.simplefilter("ignore")
+OLD_FW = False
+def line_fixer(line, queue_lst, list):
+    len_q_lst = len(queue_lst)
+    while len(line) > 0:
+        free_spaces11 = len(queue_lst) - sum(x is not None for x in queue_lst)
+        range11 = min(free_spaces11, len(line))
+        words_in_range = line[:range11]
+        for m in range(range11):
+            first_index_available = queue_lst.index(None)
+            if first_index_available is not None:
+                queue_lst[first_index_available] = words_in_range[m]
+        line = line[range11:]
+        free_spaces11 -= range11
+        if free_spaces11 == 0:
+            i = 1
+            fixed = [queue_lst[0]]
+            while 0 < i < len(queue_lst) - 4:
+                lsb = queue_lst[i]
+                msb = 16 ** 2 * queue_lst[i+1]
 
-def str_bytes_to_bytes(single_line):
-    """ coverts string of format "b'\x00'" to bytes b'\x00'  """
+               # print(f'{msb},{lsb}')
+                fixed.append(msb + lsb)# - 2 ** 16 if (msb + lsb) >= (2 ** 15 - 1) else msb + lsb)
+                i += 2
+            list.append(fixed)
 
-    global i
-    flag = False
-    special_cha = False
-    hex_str = ''
-    prev_cha = ''
+            queue_lst = [None for _ in range(len_q_lst)]
 
-    for i, char in enumerate(single_line):
-
-        if 3 < i < (len(single_line) - 1):
-            if single_line[i - 1] == 'x' and single_line[i - 2] == '\\':
-                flag = False
-                if single_line[i + 1] == '\\' and single_line[i + 2] == 'x':
-                    hex_str += hex(ord(char))[2:]
-                    flag = True
-                else:
-                    hex_str += char
-                prev_cha = char
-            elif single_line[i - 3] == '\\' and single_line[i - 1] == prev_cha and single_line[i - 2] == 'x' and not flag:
-                hex_str += char
-            elif char != 'x' and char != '\\':
-                hex_str += hex(ord(char))[2:]
-            elif single_line[i + 1] != 'x' and char == '\\' and single_line[i - 1] != '\\':
-                hex_str += hex(ord(char))[2:]
-                special_cha = True
-            elif single_line[i - 1] != '\\' and char == 'x':
-                hex_str += hex(ord(char))[2:]
-            elif char == '\\' and single_line[i + 1] != 'x' and single_line[i - 1] != '\\':
-                hex_str += hex(ord(char))[2:]
-    # print('len:', len(hex_str),' line:', hex_str)
-   #if len(hex_str) < 10:
-   #     print('input length is too short, ignoring line with index:', i)
-   #     print(single_line)
-    #    return
-    #else:
-    return bytes.fromhex(hex_str) if not special_cha else bytes.fromhex(hex_str).decode('unicode_escape').encode('raw_unicode_escape')
+    return queue_lst
 
 
-
-def parse_line(line, typ):
-    """ extracts header, data, timestamp from each line and fixes reverse bit order """
-
-    # TODO handle invalid inputs for code, data and timestamp
-    header = None
-    words_in_line = []
-    timestamp = [16 ** 2 * ord(line[-1:]) + ord(line[-3:-2]), 16 ** 2 * ord(line[-5:-4]) + ord(line[-7:-6])] if \
-        len(line) > 4 else None
-    if typ== 'imu':
-        header = line[0]
-        data = line[1:-4]
-    else:
-        data = line[0:-4]
-    for i, byte in enumerate(data):
-        word = data[i] + 16 ** 2 * data[i + 1]
-        if not i % 2:
-            words_in_line.append(word)
-        if (i == len(data) - 2):
-            break
-
-    # print('time stamp:', timestamp,'\nheader:', header,'\nline:', words_in_line)
-    # if incorrect_header:
-    #     print('header:', header, '\nline:', line, '\nparsed:', words_in_line)
-
-    # print('len:', len(words_in_line))
-    return [header, words_in_line, timestamp] if typ == 'imu' else [None, words_in_line, timestamp]
+def NormalizeData(data):
+    return (data - np.min(data)) / (np.max(data) - np.min(data))
 
 
-def signal_analyzer(path, type):
+def imu_analyzer(path, serial_num):
     file = open(path, 'r')
     from_txt = file.readline()
     from_txt = from_txt[1:-1]  # remove '[]' from string
     imu = from_txt.split(', b')
     lst = []
-    # prev_line = None
-    # prev_header = None
-    # len_by_header = None
-    # fixed_words_in_line = []
-    # fixed_prev_line = []
+    line_len = len(bytes.fromhex(imu[0][2:-1])) if OLD_FW else int(len(bytes.fromhex(imu[0][2:-1]))/5)
+
+    lst_queue1 = [None for _ in range(line_len)]
+    lst_queue11 = [None for _ in range(37)]  # 1 byte header + 16 words in line + 2 words timestamp = 1+32+4
+    #lst_queue1 = [None for _ in range(21)]  # 1 byte header + 8 words in line + 2 words timestamp = 1+16+4
+    # word = 2 bytes
     for j, data in enumerate(imu):
         if j:
             imu[j] = 'b' + data
 
-        res = str_bytes_to_bytes(imu[j])
+        line_bytes = bytes.fromhex(imu[j][2:-1])
+        header = line_bytes[0]
+        if line_bytes is not None:
 
-        if res is not None:
-            # if j ==13:
-            #     lst.append(parse_line(res.decode('unicode_escape').encode('raw_unicode_escape'), type))
-            #     print(len(parse_line(res.decode('unicode_escape').encode('raw_unicode_escape'), type)))
-                #print(res.decode('unicode_escape').encode('raw_unicode_escape'))
-            # else:
-            header, words_in_line, timestamp = parse_line(res, type)
+            # valid headers:
+            if header == 11:
+                if len(line_bytes) < len(lst_queue11) and line_bytes[-1] == 0:  # line too short and ends with timestamp
+                    lst_queue11 = [None for _ in range(len(lst_queue11))]
+                else:
+                    lst_queue11 = line_fixer(line_bytes, lst_queue11, lst)
 
-            is_valid = True if header in [1, 11] else False  # if false it's partial data for imu only
-            # if type == 'imu' and not is_valid:
-            #     lst.remove(prev_line)
-            #     if prev_header == 11:
-            #         len_by_header = 16
-            #     elif prev_header == 1:
-            #         len_by_header = 8
-            #
-            #     if len_by_header <= len(words_in_line):
-            #         fixed_prev_line = prev_line[:len_by_header]
-            #         fixed_words_in_line = prev_line[len_by_header+1:]
-            #         fixed_words_in_line.insert(0, header)
-            #
-            #         header = prev_header
-            #         lst.append(fixed_prev_line)
-            #         lst.append(fixed_words_in_line)
-            #     else:
-            #         fixed_prev_line = prev_line
+            elif header == 1:
+                if len(line_bytes) < len(lst_queue1) and line_bytes[-1] == 0:
+                    lst_queue1 = [None for _ in range(len(lst_queue1))]
+                else:
+                    lst_queue1 = line_fixer(line_bytes, lst_queue1, lst)
 
+            else:  # invalid headers
+                if lst_queue1[0] == 1:
+                    lst_queue1 = line_fixer(line_bytes, lst_queue1, lst)
 
+                elif lst_queue11[0] == 11:
+                    lst_queue11 = line_fixer(line_bytes, lst_queue11, lst)
 
-
-                #lst.append(words_in_line)
-
-            lst.append(words_in_line)
-            # prev_line = words_in_line
-            # prev_header = header
-                #print(len(parse_line(res, type)))
-        # if j == 13:
-        #     print(res, 'len: ', len(parse_line(res.decode('unicode_escape').encode('raw_unicode_escape'), type)))
-        #     print(imu[j])
     # write outputs to file
-    filename = 'output-IMU.csv' if type == 'imu' else 'output-SNC.csv'
-    file = open(filename, 'w', newline='')
-    with file:
-        write = csv.writer(file)
-        write.writerows(lst)
+    # filename = f'/home/wld-hw/rpi_band_tester/output-IMU_{serial_num}.csv'
+    # file = open(filename, 'w', newline='')
+    # write = csv.writer(file)
+    # write.writerows(lst)
+    data_11 = []
+    data_1 = []
 
-    # plot data
-    # for item in lst:
-    #     plt.plot(item)
-    #     plt.show()
+    for item in lst:
 
-    return lst
+        # group a few consecutive lines with same header for plot
+        if item[0] == 11:
+            data_11.append(item[1:-2])
+        if item[0] == 1:
+            data_1.append(item[1:-2])
+
+    concat = np.concatenate(data_1)
+
+    # verify signal
+    corr_threshold_high = 150
+    corr_threshold_low = 100
+    imu_bound = [1050, 3050] if not OLD_FW else [950, 2050]
+
+    corr = np.convolve(NormalizeData(concat[1500:]), np.ones(1000), mode='same')
+    imu_corr = corr[imu_bound[0]: imu_bound[1]]  # check if high correlation in the bounds
+    idle_corr = np.concatenate([corr[:imu_bound[0]], corr[imu_bound[1]:]])  # check if low correlation out of the bounds
+
+    imu_test_res = True if np.mean(idle_corr) < corr_threshold_low and np.mean(imu_corr) > corr_threshold_high else False
+
+    filename = f"{test_parameters.main_dir}concated_signal_{serial_num}.csv"
+    print(serial_num)
+    file_o = open(filename, 'w+')
+    # file_o.seek(0,0)
+    write = csv.writer(file_o)
+    write.writerow(list(concat))
+    file_o.close()
+    now = datetime.now()
+    plt.xlabel(f'{now.strftime("%d/%m/%Y %H:%M:%S")}')
+    plt.title("IMU")
+    plt.plot(concat[1500:])
+    plt.savefig(f"{test_parameters.main_dir}IMU_{serial_num}.png", dpi=1000)
+    plt.clf()
 
 
-if __name__ == '__main__':
-    path = '/Users/avigalk/PycharmProjects/avigal_testing/IMU.txt'
-    # l = b'\x0b\x83!o\x1e\xc9\x1d\n"\x8e!b\x1e\xb8\x1d\x19"\x99!W\x1e\xa8\x1d\'"\xa2!L\x1e\x9a\x1d4"\xe4\x19\x14\x00'
-    # l = str_bytes_to_bytes(l)
+    # plt.clf()
+    # plt.xlabel(f'{now.strftime("%d/%m/%Y %H:%M:%S")}')
+    # plt.title("IMU_corr")
+    # plt.plot(corr)
+    # plt.show()
 
-    # with open("my_file.txt", "wb") as binary_file:
-    #     # Write bytes to file
-    #     binary_file.write(l)
-    lst = signal_analyzer(path, 'imu')
-    # file = open("my_file.txt", 'rb')
-    # from_txt = file.readline()
-    a = 1
+    return lst, imu_test_res
+
+# if __name__ == '__main__':
+#     path = f'{test_parameters.main_dir}IMU_1426.txt'
+#     lst, res = imu_analyzer(path, 1426)
+#     done = 1
+
+

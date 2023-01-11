@@ -529,7 +529,7 @@ static void gatts_mtu_req(const uint8_t *pdu, uint16_t len, gpointer user_data)
         return;
     }
 
-    opdu = g_attrib_get_buffer(attrib, &plen);
+    //opdu = g_attrib_get_buffer(attrib, &plen);
 
     // According to the Bluetooth specification, we're supposed to send the response
     // before applying the new MTU value:
@@ -540,16 +540,23 @@ static void gatts_mtu_req(const uint8_t *pdu, uint16_t len, gpointer user_data)
     // set new value for MTU
     if (g_attrib_set_mtu(attrib, mtu))
     {
+    	opdu = g_attrib_get_buffer(attrib, &plen);
         opt_mtu = mtu;
         olen = enc_mtu_resp(mtu, opdu, plen);
         cmd_status(0, NULL);
+        g_attrib_send(attrib, 0, opdu, olen, NULL, NULL, NULL);
     }
     else {
+    	opdu = g_attrib_get_buffer(attrib, &plen);
         // send NOT SUPPORTED
         olen = enc_error_resp(opcode, mtu, ATT_ECODE_REQ_NOT_SUPP, opdu, plen);
-    }
-    if (olen > 0)
         g_attrib_send(attrib, 0, opdu, olen, NULL, NULL, NULL);
+    }
+
+   /* if (olen > 0){
+    	
+        g_attrib_send(attrib, 0, opdu, olen, NULL, NULL, NULL);
+        }*/
 }
 
 static void connect_cb(GIOChannel *io, GError *err, gpointer user_data)
@@ -2215,5 +2222,4 @@ int main(int argc, char *argv[])
 
     return EXIT_SUCCESS;
 }
-
 

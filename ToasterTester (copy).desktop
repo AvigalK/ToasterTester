@@ -1,0 +1,7 @@
+[Desktop Entry]
+Name=ToasterTester
+Comment=debug
+Exec=sh /home/wld-hw/rpi_band_tester/ToasterTester-GUI-Ubuntu.sh
+Icon=/home/wld-hw/Downloads/toaster.jpg
+Terminal=true
+Type=Application
